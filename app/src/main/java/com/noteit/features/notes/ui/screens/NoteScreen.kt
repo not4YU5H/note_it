@@ -1,6 +1,12 @@
 package com.noteit.features.notes.ui.screens
 
 
+import android.Manifest
+import android.app.Application
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +23,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,6 +37,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +57,8 @@ import com.noteit.data.model.NotesResponse
 import com.noteit.ui.theme.Background
 import com.noteit.ui.theme.BoxColor
 import com.noteit.ui.theme.Content
+import com.noteit.utils.VoiceToTextParser
+import com.noteit.utils.VoiceToTextParserState
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +67,20 @@ fun NoteScreen() {
     var title by remember { mutableStateOf("") }
     var des by remember { mutableStateOf("") }
     var isAddDialog by remember { mutableStateOf(false) }
+    val voiceToTextParser by lazy {
+        VoiceToTextParser(app = Application())
+    }
+    var canRecord by remember {
+        mutableStateOf(false)
+    }
+    val recordAudioLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(), onResult = { isGranted->
+            canRecord = isGranted
+        })
+    LaunchedEffect(key1 = recordAudioLauncher) {
+        recordAudioLauncher.launch(Manifest.permission.RECORD_AUDIO)
+    }
+    val state by voiceToTextParser.state.collectAsState()
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
@@ -86,7 +112,7 @@ fun NoteScreen() {
     }
     
     if(isAddDialog) {
-        ShowDialogBox(title = title, description = des, onTitleChange = {title = it}, onDesChange = {des = it}, onClose = {
+        ShowDialogBox(title = title, description = des, state = state, voiceToTextParser = voiceToTextParser, onTitleChange = {title = it}, onDesChange = {des = it}, onClose = {
             isAddDialog = it
         }) {
             
@@ -164,14 +190,17 @@ fun NotesEachRow(
     }
 }
 
+@OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun ShowDialogBox(
     title:String,
     description:String,
+    state: VoiceToTextParserState,
+    voiceToTextParser: VoiceToTextParser,
     onTitleChange:(String)->Unit,
     onDesChange:(String)->Unit,
     onClose:(Boolean)->Unit,
-    onClick:()->Unit
+    onClick:()->Unit,
 ) {
     AlertDialog(onDismissRequest = {},
         {
@@ -185,6 +214,21 @@ fun ShowDialogBox(
             contentPadding = PaddingValues(15.dp)
             ) {
                 Text(text = "Save")
+            };
+            FloatingActionButton(onClick = {
+                if (state.isSpeaking) {
+                    voiceToTextParser.stopListening()
+                } else {
+                    voiceToTextParser.startListening()
+                }
+            }) {
+                AnimatedContent(targetState = state.isSpeaking) { isSpeaking->
+                    if(isSpeaking) {
+                        Icon(imageVector = Icons.Rounded.Stop, contentDescription = "")
+                    } else {
+                        Icon(imageVector = Icons.Rounded.Mic, contentDescription = "")
+                    }
+                }
             }
         },
     shape = RoundedCornerShape(16.dp),
